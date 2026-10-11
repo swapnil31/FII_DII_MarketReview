@@ -1,0 +1,4 @@
+sample,weak_days,other_days,pct_red_weak,pct_red_other,avg_next_weak,avg_next_other,p_fisher,p_welch_t,p_mann_whitney,p_permutation
+Full period,79,434,51.9,51.4,-0.01,-0.01,0.5154,0.5054,0.5754,0.5046
+First half (to Sep 2025),49,207,51.0,51.2,-0.01,0.02,0.5726,0.423,0.506,0.4167
+Second half (from Sep 2025),30,227,53.3,51.5,-0.02,-0.04,0.5046,0.5625,0.5813,0.5747

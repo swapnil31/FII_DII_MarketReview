@@ -1,0 +1,33 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Data produced by the pipeline (rebuilt from source, not code)
+everyday/
+posts/
+warehouse.duckdb
+warehouse.duckdb.wal
+bhavcopy/
+lake/
+reference/
+
+# Third-party data backfilled by hand: keep it local, don't republish it
+backfill/
+reports/hypothesis/daily_events.csv
+
+# Leftovers, safe to delete
+gitignore.txt
+.github/workfllows/
+dags/market_day.py
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Airflow runtime files, if any appear locally
+logs/
+airflow.db

@@ -1,0 +1,6 @@
+curl_cffi
+yfinance
+duckdb
+matplotlib
+scipy
+pyspark==3.5.3
