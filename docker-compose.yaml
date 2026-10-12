@@ -15,6 +15,10 @@ x-airflow-common: &airflow-common
     AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE: Asia/Kolkata
     AIRFLOW__WEBSERVER__WORKERS: "2"                      # fewer workers = less memory
     AIRFLOW__WEBSERVER__SECRET_KEY: fii-dii-local-secret   # lets the web server read task logs
+    # Email alerts: values come from the .env file next to this one (git ignores it).
+    ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-}
+    ALERT_EMAIL_APP_PASSWORD: ${ALERT_EMAIL_APP_PASSWORD:-}
+    ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./:/opt/airflow/project

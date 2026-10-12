@@ -1,3 +1,6 @@
+# Secrets (email app password etc.): never commit
+.env
+
 # Python
 .venv/
 __pycache__/

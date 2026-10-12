@@ -7,6 +7,9 @@ Runs 8:00 PM IST, Monday to Friday:
                                                      |
                    -> extract_bhavcopy -> spark_bhavcopy --+--> analyze_sectors
                                                            +--> daily_explainer
+    make_post + analyze_sectors + daily_explainer --> notify_summary (email)
+
+- Any task that fails for good (after retries) sends an email alert.
 
 - The bhavcopy branch is independent: if NSE's bhavcopy is late or Spark fails,
   the FII/DII warehouse and the daily post still go out.
@@ -36,6 +39,21 @@ def run_date_ist(context) -> "pendulum.Date":
     return context["logical_date"].in_timezone(IST).date()
 
 
+def alert_on_failure(context) -> None:
+    """Runs when a task has FAILED for good (after all its retries). Sends an email alert."""
+    import notify
+
+    ti = context["task_instance"]
+    notify.send_message(notify.failure_text(
+        dag_id=ti.dag_id,
+        task_id=ti.task_id,
+        run_date=str(run_date_ist(context)),
+        try_number=ti.try_number,
+        error=repr(context.get("exception") or ""),
+        log_url=ti.log_url,
+    ))
+
+
 @dag(
     dag_id="fii_dii_pipeline",
     description="Extract FII/DII + Nifty, build the DuckDB warehouse, create the daily post",
@@ -44,7 +62,11 @@ def run_date_ist(context) -> "pendulum.Date":
     start_date=pendulum.datetime(2026, 10, 12, tz=IST),
     catchup=False,
     max_active_runs=1,
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=5)},
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
+        "on_failure_callback": alert_on_failure,   # email alert, only after the last retry
+    },
     tags=["fii-dii", "markets"],
 )
 def fii_dii_pipeline():
@@ -110,6 +132,30 @@ def fii_dii_pipeline():
 
         return str(explainer.main(run_date_ist(context)))
 
+    # Runs last, whatever happened upstream (trigger_rule="all_done"), and reports the run.
+    # On market holidays the gate skips it too, so no message is sent.
+    @task(trigger_rule="all_done", retries=0)
+    def notify_summary(**context) -> str:
+        from pathlib import Path
+
+        import notify
+
+        day = str(run_date_ist(context))
+        me = context["task_instance"].task_id
+        states = {ti.task_id: str(ti.state) for ti in context["dag_run"].get_task_instances()
+                  if ti.task_id != me}
+        head = notify.summary_text(day, states)
+
+        post_dir = Path(PROJECT_DIR) / "posts" / day
+        for image, text in (("explainer.png", "explainer.txt"), ("chart.png", "caption.txt")):
+            if (post_dir / image).exists():
+                caption = (post_dir / text).read_text(encoding="utf-8") if (post_dir / text).exists() else ""
+                notify.send_photo(post_dir / image, f"{head}\n\n{caption}")
+                break
+        else:
+            notify.send_message(head)
+        return head
+
     @task
     def load_warehouse() -> None:
         import load_warehouse as warehouse
@@ -126,10 +172,15 @@ def fii_dii_pipeline():
     loaded = load_warehouse()
     spark = spark_bhavcopy()
 
-    gate >> [extract_fii_dii(), extract_nifty()] >> loaded >> make_post()
+    post = make_post()
+    sectors = analyze_sectors()
+    explainer = daily_explainer()
+
+    gate >> [extract_fii_dii(), extract_nifty()] >> loaded >> post
     gate >> extract_bhavcopy() >> spark
-    [loaded, spark] >> analyze_sectors()
-    [loaded, spark] >> daily_explainer()
+    [loaded, spark] >> sectors
+    [loaded, spark] >> explainer
+    [post, sectors, explainer] >> notify_summary()
 
 
 fii_dii_pipeline()
