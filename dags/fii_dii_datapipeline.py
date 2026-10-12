@@ -6,6 +6,7 @@ Runs 8:00 PM IST, Monday to Friday:
                    -> extract_nifty    --+--> load_warehouse --> make_post
                                                      |
                    -> extract_bhavcopy -> spark_bhavcopy --+--> analyze_sectors
+                                                           +--> daily_explainer
 
 - The bhavcopy branch is independent: if NSE's bhavcopy is late or Spark fails,
   the FII/DII warehouse and the daily post still go out.
@@ -104,6 +105,12 @@ def fii_dii_pipeline():
         sectors.main()
 
     @task
+    def daily_explainer(**context) -> str:
+        import daily_explainer as explainer
+
+        return str(explainer.main(run_date_ist(context)))
+
+    @task
     def load_warehouse() -> None:
         import load_warehouse as warehouse
 
@@ -122,6 +129,7 @@ def fii_dii_pipeline():
     gate >> [extract_fii_dii(), extract_nifty()] >> loaded >> make_post()
     gate >> extract_bhavcopy() >> spark
     [loaded, spark] >> analyze_sectors()
+    [loaded, spark] >> daily_explainer()
 
 
 fii_dii_pipeline()
