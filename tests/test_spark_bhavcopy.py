@@ -75,3 +75,26 @@ def test_unknown_header_reported():
 
 def test_blank_numbers_become_none():
     assert sb._num("") is None and sb._num("-") is None and sb._num(" 12.5 ") == 12.5
+
+
+# ---- Incremental planning ---------------------------------------------------------------------
+
+RAW = {"dt=2026-09-30/a.zip": 100, "dt=2026-10-12/b.zip": 200, "dt=2026-10-13/c.zip": 300}
+
+
+def test_nothing_new_means_no_months():
+    assert sb.plan_months(RAW, dict(RAW)) == []
+
+
+def test_new_file_reprocesses_only_its_month():
+    seen = {k: v for k, v in RAW.items() if k != "dt=2026-10-13/c.zip"}
+    assert sb.plan_months(RAW, seen) == [(2026, 10)]
+
+
+def test_changed_size_counts_as_new():
+    seen = dict(RAW, **{"dt=2026-09-30/a.zip": 99})
+    assert sb.plan_months(RAW, seen) == [(2026, 9)]
+
+
+def test_empty_manifest_means_every_month():
+    assert sb.plan_months(RAW, {}) == [(2026, 9), (2026, 10)]
