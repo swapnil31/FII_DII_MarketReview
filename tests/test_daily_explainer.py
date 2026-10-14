@@ -64,3 +64,39 @@ def test_caption_mentions_drags_and_flows():
     s = stocks([("ITC", "FMCG", -0.03, 500), ("A", "x", 0.01, 1)])
     cap = de.build_caption(de.build_summary(s, SECTORS, FLOWS_DOWN, {"ITC"}, DAY))
     assert "Dragged down by: ITC" in cap and "But: Auto +1.5%" in cap and "FII -1,708 cr" in cap
+
+
+# ---- Points attribution ------------------------------------------------------------------------
+
+def index_day():
+    # 4 index stocks + 2 non-index peers. Equal float shares, prices make weights 40/30/20/10.
+    rows = [("BIGBANK", "Fin", 0.02, 1, 400.0, 1.0), ("ITCO", "FMCG", -0.03, 1, 300.0, 2.8),
+            ("OILCO", "Oil", 0.01, 1, 200.0, 1.0), ("ITSVC", "IT", 0.05, 1, 100.0, 1.2),
+            ("SMALLBANK", "Fin", 0.018, 1, 50.0, 1.0), ("SMALLFMCG", "FMCG", -0.002, 1, 50.0, 1.0)]
+    return pd.DataFrame(rows, columns=["symbol", "industry", "daily_return", "weight_turnover_20d",
+                                       "prev_close", "volume_vs_20d"])
+
+
+FLOATS = {"BIGBANK": 1e6, "ITCO": 1e6, "OILCO": 1e6, "ITSVC": 1e6}
+# Index move = 0.4*2% + 0.3*-3% + 0.2*1% + 0.1*5% = +0.6%
+NIFTY_PREV = 20000.0
+
+
+def test_points_reconcile_to_index_move():
+    idx, rc = de.attribute(index_day(), FLOATS, NIFTY_PREV * 1.006, 0.6)
+    assert abs(rc["sum"] - rc["actual"]) < 0.01 and rc["ok"]
+    assert round(idx.set_index("symbol").loc["BIGBANK", "points"], 1) == 160.0     # 0.4 * 2% * 20000
+
+
+def test_leave_one_out_labels():
+    idx, _ = de.attribute(index_day(), FLOATS, NIFTY_PREV * 1.006, 0.6)
+    lab = idx.set_index("symbol")["label"]
+    assert lab["ITCO"] == "own move, 2.8x volume"        # -3% vs peers -0.2%
+    assert lab["BIGBANK"] == "moved with sector"         # +2% vs other banks +1.8%
+
+
+def test_summary_uses_points_when_float_data_present():
+    flows = {"nifty_close": NIFTY_PREV * 1.006, "nifty_pct": 0.6, "fii": 1, "dii": 1, "fii_side": "buy", "streak": 1}
+    s = de.build_summary(index_day(), SECTORS, flows, set(FLOATS), DAY, FLOATS)
+    assert list(s["movers"]["symbol"]) == ["BIGBANK", "ITSVC", "OILCO"]       # biggest point lifters first
+    assert "Nifty 50 stocks explain +120 of +120 pts" in de.build_caption(s)

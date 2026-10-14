@@ -7,6 +7,7 @@ Runs 8:00 PM IST, Monday to Friday:
                                                      |
                    -> extract_bhavcopy -> spark_bhavcopy --+--> analyze_sectors
                                                            +--> daily_explainer
+                   -> refresh_float_shares (weekly, Yahoo) -----------------^
     make_post + analyze_sectors + daily_explainer --> notify_summary (email)
 
 - Any task that fails for good (after retries) sends an email alert.
@@ -126,6 +127,16 @@ def fii_dii_pipeline():
 
         sectors.main()
 
+    # Weekly refresh of Nifty 50 float shares (Yahoo) for index-point attribution. Never fails the run:
+    # on any problem it keeps the previous file and the explainer still works.
+    @task(retries=0)
+    def refresh_float_shares() -> str:
+        import index_weights
+
+        status = index_weights.refresh()
+        print(status)
+        return status
+
     @task
     def daily_explainer(**context) -> str:
         import daily_explainer as explainer
@@ -180,6 +191,7 @@ def fii_dii_pipeline():
     gate >> extract_bhavcopy() >> spark
     [loaded, spark] >> sectors
     [loaded, spark] >> explainer
+    gate >> refresh_float_shares() >> explainer
     [post, sectors, explainer] >> notify_summary()
 
 
